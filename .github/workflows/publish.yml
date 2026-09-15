@@ -1,0 +1,90 @@
+name: Publish running atlas
+on:
+  push:
+    branches-ignore: [garmin-state]
+  schedule:
+    - cron: '17 22 * * *' # 06:17 Singapore; GitHub may delay scheduled runs.
+  workflow_dispatch:
+    inputs:
+      reset_session:
+        description: Use renewed GARMIN_TOKENS while retaining saved activities
+        type: boolean
+        default: false
+      redownload:
+        description: Re-download recordings in the configured history window
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: running-atlas-publish
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write # Only for encrypted garmin-state branch.
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install and test
+        run: |
+          python -m pip install -r requirements.txt
+          python -m unittest discover -s tests -v
+          node --test tests/model.test.mjs
+      - name: Restore encrypted state
+        run: bash scripts/restore_state.sh
+      - name: Sync Garmin or render existing state
+        id: sync
+        env:
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GARMIN_STATE_KEY: ${{ secrets.GARMIN_STATE_KEY }}
+          PUBLISH_HEALTH: ${{ vars.PUBLISH_HEALTH || 'true' }}
+          SYNC_ENABLED: ${{ vars.GARMIN_SYNC_ENABLED }}
+          MAX_ACTIVITIES: ${{ vars.MAX_ACTIVITIES || '1000' }}
+          ROUTE_TRIM_METERS: ${{ vars.ROUTE_TRIM_METERS || '200' }}
+          EXCLUDED_ACTIVITY_IDS: ${{ vars.EXCLUDED_ACTIVITY_IDS }}
+          RESET_SESSION: ${{ inputs.reset_session && 'true' || 'false' }}
+          REDOWNLOAD: ${{ inputs.redownload && 'true' || 'false' }}
+        run: |
+          if [[ "$SYNC_ENABLED" == 'true' ]]; then
+            options=()
+            if [[ "$REDOWNLOAD" == 'true' ]]; then options+=(--redownload); fi
+            python -m scripts.sync "${options[@]}"
+          elif [[ -s .state/state.enc ]]; then
+            python -m scripts.sync --offline
+          else
+            echo 'Manual import mode; set GARMIN_SYNC_ENABLED=true after configuring secrets.'
+          fi
+      - name: Preserve refreshed session even if collection failed
+        if: ${{ always() && (steps.sync.outcome == 'success' || steps.sync.outcome == 'failure') }}
+        run: bash scripts/persist_state.sh
+      - name: Prepare public files only
+        run: |
+          python -m scripts.build
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

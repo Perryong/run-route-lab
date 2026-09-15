@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Your miles, mapped. A personal running atlas powered by Garmin exports.">
+<title>Run Route Lab — Your miles, mapped.</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23eb6b3f'/%3E%3Cpath d='M10 28L20 10l10 18M15 22h10' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./vendor/leaflet.css"><link rel="stylesheet" href="./styles.css">
+<script src="./vendor/leaflet.js" defer></script><script type="module" src="./app.js"></script>
+</head>
+<body>
+<header class="header">
+  <a class="brand" href="./"><span class="brand-icon">↗</span><span>RUN ROUTE <b>LAB</b><small>A PERSONAL RUNNING ATLAS</small></span></a>
+  <div class="header-right"><button id="view-health" class="button secondary">Health overview</button><span id="source-status" class="source-status">GARMIN EXPORTS</span><button id="demo" class="button secondary">Explore demo ↗</button><button id="help" class="button dark">Connect your runs <span>+</span></button></div>
+</header>
+<main class="workspace">
+<aside class="sidebar">
+  <div class="eyebrow"><span class="live-dot"></span> THE RUNNING JOURNAL <span>01 /</span></div>
+  <h1>Your miles.<br><em>Your map.</em></h1>
+  <p class="intro">Every route tells a story.<br>Find yours, one run at a time.</p>
+  <section class="volume"><div class="section-heading"><span>WEEKLY DISTANCE</span><span>8 WEEKS</span></div><div id="weekly" class="weekly" aria-label="Weekly running distance"></div><div class="chart-axis"><span>8 weeks ago</span><span>This week</span></div></section>
+  <section class="filter-section"><div class="section-heading"><span>ACTIVITY EXPLORER</span><button id="reset" class="text-button">Reset</button></div>
+    <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Find a run…" aria-label="Search runs"></label>
+    <div class="date-filters"><label>FROM<input id="from" type="date"></label><label>TO<input id="to" type="date"></label></div>
+    <div class="list-heading"><span id="result-count">0 runs</span><select id="sort" aria-label="Sort runs"><option value="date">Newest first</option><option value="distance">Longest first</option></select></div>
+  </section>
+  <div id="run-list" class="run-list" aria-label="Running activities"></div>
+  <footer class="sidebar-footer"><span>⌁</span><div>BUILT FOR THE LONG RUN<small id="updated">Waiting for your first import</small></div></footer>
+</aside>
+<section id="health-panel" class="health-panel" hidden aria-label="Health overview">
+<div class="health-heading"><div><div class="eyebrow light">DAILY ACTIVITY &amp; HEART RATE</div><h2>Health overview</h2><p id="health-source">Garmin daily readings</p></div><label>Day<select id="health-date" aria-label="Select health date"></select></label></div>
+<p id="health-empty" hidden>No daily health data yet. Enable Garmin sync to load your readings. FIT/GPX imports provide activity data only.</p>
+<div class="health-cards"><article><span>DAILY STEPS</span><strong id="health-steps">—</strong><small>All-day step count</small></article><article><span>DAILY DISTANCE</span><strong id="health-distance">—</strong><small>Garmin daily total · not just runs</small></article><article><span>RESTING HEART RATE</span><strong id="health-rest">—</strong><small>Garmin resting reading · bpm</small></article></div>
+<div class="health-heart"><div><span>Average heart rate</span><strong id="health-average">—</strong><small>Mean of available recorded samples · bpm</small></div><div><span>Maximum heart rate</span><strong id="health-max">—</strong><small>Highest daily reading · bpm</small></div></div>
+<div class="health-chart"><h3>Steps over the last 7 days</h3><div id="health-bars" aria-label="Daily step counts"></div></div>
+<div class="health-history"><h3>Daily history</h3><table><thead><tr><th>Date</th><th>Steps</th><th>Distance</th><th>Resting HR</th></tr></thead><tbody id="health-table"></tbody></table></div>
+<p class="health-footnote">Today may be incomplete until your watch syncs. “—” means no reading is available. Daily metrics are independent of route filters.</p>
+</section>
+<section class="map-panel" aria-label="Route explorer">
+  <div id="map" aria-label="Interactive running route map"></div>
+  <div class="map-top">
+    <div class="map-label"><span class="map-label-icon">◎</span><div>THE ROUTE ATLAS<small id="map-subtitle">Singapore · ready to explore</small></div></div>
+    <button id="overview" class="button map-button">⊞ All routes</button>
+  </div>
+  <div class="stat-row"><div class="stat"><span>TOTAL DISTANCE</span><strong id="total-distance">0.0 <small>km</small></strong></div><div class="stat"><span>RUNS LOGGED</span><strong id="total-runs">0</strong></div><div class="stat"><span>TIME ON YOUR FEET</span><strong id="total-time">—</strong></div></div>
+  <div id="empty" class="empty-card"><div class="empty-icon">⌁</div><div class="eyebrow light">THE NEXT CHAPTER STARTS HERE</div><h2>A map made of your miles.</h2><p>Connect Garmin or import an activity export to put your first route on the map.</p><button id="empty-demo" class="button dark">Explore the Singapore demo ↗</button><small>Illustrative routes only. No personal activity data.</small></div>
+  <div id="tile-notice" class="tile-notice" hidden>Base map unavailable. Your route controls still work.</div>
+  <div id="demo-note" class="demo-note" hidden>DEMO MODE · Illustrative Singapore routes, not your recorded runs</div>
+  <article id="detail" class="detail-card" hidden>
+    <div class="detail-top"><div><div class="eyebrow light" id="run-date">SELECTED RUN</div><h2 id="run-title"></h2></div><span class="run-tag">RUNNING ↗</span></div>
+    <div class="detail-grid"><div class="detail-metrics"><div><span>DISTANCE</span><strong id="run-distance"></strong></div><div><span>DURATION</span><strong id="run-duration"></strong></div><div><span>AVG. PACE</span><strong id="run-pace"></strong></div><div><span>ELEVATION GAIN</span><strong id="run-gain"></strong></div></div><div class="profile"><div class="section-heading"><span>ELEVATION PROFILE</span><span id="elevation-label">METRES</span></div><svg id="elevation" viewBox="0 0 320 65" role="img" aria-label="Elevation profile"></svg><div class="chart-axis"><span>Visible route start</span><span>Visible route end</span></div></div></div>
+    <div class="playback"><button id="play" class="play" aria-label="Play route">▶</button><label for="progress">ROUTE REPLAY<small id="replay-status">30-second replay</small></label><input id="progress" type="range" min="0" max="1000" value="0" aria-label="Route replay progress"><span id="percent">0%</span><button id="speed" class="speed" aria-label="Change replay speed">1×</button></div>
+    <p id="run-heart" class="run-heart"></p><p id="privacy-note" class="privacy-note"></p>
+  </article>
+  <div class="map-bottom"><span>EXPLORE MORE. KEEP MOVING.</span><span>↗ N</span></div>
+</section>
+</main>
+<dialog id="setup"><button id="close-help" class="close" aria-label="Close setup">×</button><div class="eyebrow light">YOUR RUNNING ATLAS</div><h2>Bring your runs to life.</h2><p>Garmin authentication happens on your computer. This public page never asks for your password.</p><ol><li>Download the source project and install its Python requirements.</li><li>Run <code>python -m scripts.auth --repo OWNER/REPO</code> locally to connect Garmin and set your repository secrets.</li><li>Enable GitHub Pages with GitHub Actions, then set <code>GARMIN_SYNC_ENABLED=true</code> in repository variables.</li></ol><p>Prefer export files? Use <code>python -m scripts.import_exports imports/run.fit</code> and publish the processed dataset. Full setup instructions are in the project README.</p><div class="setup-note">Only publish routes you want to share. Endpoint trimming reduces detail around your start and finish; it does not make a public route private.</div><button id="close-setup" class="button dark">Got it</button></dialog>
+</body></html>
