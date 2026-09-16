@@ -5,6 +5,7 @@ const ns='http://www.w3.org/2000/svg';
 const svg=(tag,attrs)=>{const el=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);return el;};
 let actual=[],all=[],filtered=[],selected=null,demo=false,playing=false,frame=0,replay=0,speed=1,lastTime=0,edges=[],totalLength=0;
 let map,layer,marker,overview=false,actualHealth=[],healthDay='';
+let chartZoom=1;
 const colours=['#e77343','#548376','#788b4e','#ad8263','#818fb0','#bb9963'];
 function initialiseMap(){
  if(!window.L){$('tile-notice').hidden=false;$('tile-notice').textContent='Map library could not load. Reload the page.';return;}
@@ -134,6 +135,14 @@ function drawHealthLine(id,rows,colour,range){
  for(const [time,value] of data){if(value==null||!Number.isFinite(Number(value))){flush(points);points=[];continue;}points.push(`${45+(Number(time)-start)/timeSpan*575},${150-(Number(value)-low)/span*120}`);}flush(points);
  const left=svg('text',{x:45,y:178,fill:'#7d9086','font-size':11});left.textContent=healthClock(start).split(', ').at(-1);const right=svg('text',{x:620,y:178,fill:'#7d9086','font-size':11,'text-anchor':'end'});right.textContent=healthClock(end).split(', ').at(-1);chart.append(left,right);
 }
+function updateChartZoom(){
+ $('chart-dialog-chart').style.width=`${chartZoom*100}%`;setText('chart-zoom-level',`${chartZoom}×`);$('chart-zoom-out').disabled=chartZoom===1;$('chart-zoom-in').disabled=chartZoom===3;if(chartZoom===1)$('chart-dialog-scroll').scrollLeft=0;
+}
+function changeChartZoom(direction){const levels=[1,1.5,2,3],index=levels.indexOf(chartZoom);chartZoom=levels[Math.max(0,Math.min(levels.length-1,index+direction))];updateChartZoom();}
+function openHealthChart(kind){
+ const rows=demo?demoHealth():actualHealth,row=rows.find(row=>row.date===healthDay)||{},heart=kind==='heart',title=heart?'Heart rate · selected day':'Stress · selected day';
+ setText('chart-dialog-title',title);$('chart-dialog-chart').setAttribute('aria-label',title);drawHealthLine('chart-dialog-chart',heart?row.heart_rate?.samples:row.stress?.samples,heart?'#e77343':'#648876',heart?undefined:[0,100]);chartZoom=1;updateChartZoom();$('chart-dialog').showModal();
+}
 function drawSleepStages(rows){
  const chart=$('sleep-stages');chart.replaceChildren();const stages=(rows||[]).filter(row=>Array.isArray(row)&&Number.isFinite(Number(row[0]))&&Number.isFinite(Number(row[1])));
  if(!stages.length){const text=svg('text',{x:20,y:48,fill:'#7d9086','font-size':13});text.textContent='No sleep stages recorded';chart.append(text);return;}
@@ -171,6 +180,7 @@ function renderHealth(){
  }
 }
 $('health-date').onchange=()=>{healthDay=$('health-date').value;renderHealth();};
+$('expand-heart').onclick=()=>openHealthChart('heart');$('expand-stress').onclick=()=>openHealthChart('stress');$('chart-zoom-in').onclick=()=>changeChartZoom(1);$('chart-zoom-out').onclick=()=>changeChartZoom(-1);$('chart-zoom-reset').onclick=()=>{chartZoom=1;updateChartZoom();};$('chart-dialog-close').onclick=()=>$('chart-dialog').close();
 $('view-health').onclick=()=>{stop();const showing=$('health-panel').hidden;$('health-panel').hidden=!showing;document.querySelector('.map-panel').hidden=showing;setText('view-health',showing?'View running routes':'Health overview');renderHealth();if(!showing&&map){map.invalidateSize();drawMap();}};
 async function loadData(){
  try{
