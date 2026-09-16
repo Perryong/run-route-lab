@@ -112,22 +112,62 @@ function toggleDemo(){demo=!demo;all=demo?demoRuns():actual;setText('demo',demo?
 $('demo').onclick=toggleDemo;$('empty-demo').onclick=toggleDemo;
 $('help').onclick=()=>$('setup').showModal();$('close-help').onclick=$('close-setup').onclick=()=>$('setup').close();
 function demoHealth(){
- return Array.from({length:7},(_,i)=>{const d=new Date();d.setUTCDate(d.getUTCDate()-(6-i));return {date:d.toISOString().slice(0,10),steps:[8420,11230,6780,12460,9130,14520,7340][i],distance_m:[6120,8400,4890,9230,6720,10560,5340][i],resting_hr_bpm:[57,56,58,55,56,54,57][i],average_hr_bpm:[74,77,73,78,75,80,72][i],max_hr_bpm:[142,166,119,172,145,176,132][i]};});
+ return Array.from({length:7},(_,i)=>{
+  const d=new Date();d.setUTCDate(d.getUTCDate()-(6-i));const date=d.toISOString().slice(0,10),midnight=Date.parse(date+'T00:00:00Z'),sleepStart=midnight-90*60*1000,sleepEnd=midnight+390*60*1000;
+  const heart=Array.from({length:24},(_,n)=>[midnight+n*60*60*1000,Math.round(67+9*Math.sin(n/2)+35*Math.exp(-Math.pow(n-11,2)/5))]);
+  const stress=Array.from({length:24},(_,n)=>[midnight+n*60*60*1000,n===12?null:Math.round(Math.max(5,24+18*Math.sin(n/2.7)+i))]);
+  const scores=[86,78,84,73,88,91,82],total=[27900,25200,27000,23400,28800,29700,26400][i];
+  return {date,steps:[8420,11230,6780,12460,9130,14520,7340][i],distance_m:[6120,8400,4890,9230,6720,10560,5340][i],resting_hr_bpm:[57,56,58,55,56,54,57][i],average_hr_bpm:[74,77,73,78,75,80,72][i],max_hr_bpm:[142,166,119,172,145,176,132][i],
+   heart_rate:{resting_bpm:[57,56,58,55,56,54,57][i],minimum_bpm:52,maximum_bpm:[142,166,119,172,145,176,132][i],samples:heart},
+   sleep:{start_gmt:sleepStart,end_gmt:sleepEnd,total_s:total,deep_s:Math.round(total*.2),light_s:Math.round(total*.48),rem_s:Math.round(total*.25),awake_s:Math.round(total*.07),average_hr_bpm:53,average_stress:14,average_respiration_bpm:14.1,spo2_percent:97,skin_temp_c:.1,average_hrv_ms:46,body_battery_change:42,restless_moments_count:12,sleep_need:{actual_s:28800},scores:{overall:{value:scores[i],qualifier:scores[i]>84?'GOOD':'FAIR'}},levels:[[sleepStart,sleepStart+90*60*1000,1],[sleepStart+90*60*1000,sleepStart+180*60*1000,0],[sleepStart+180*60*1000,sleepStart+300*60*1000,1],[sleepStart+300*60*1000,sleepStart+390*60*1000,2],[sleepStart+390*60*1000,sleepEnd,1]],heart_rate_samples:heart.slice(0,8),stress_samples:stress.slice(0,8),body_battery_samples:stress.slice(0,8),hrv_samples:stress.slice(0,8),respiration_samples:stress.slice(0,8),movement:Array.from({length:20},(_,n)=>[sleepStart+n*20*60*1000,sleepStart+(n+1)*20*60*1000,n%3]),breathing_disruptions:[]},
+   stress:{average_level:[24,32,27,41,22,19,29][i],maximum_level:[61,73,65,82,59,54,68][i],samples:stress,body_battery_samples:stress.map(([time,value])=>[time,'MEASURED',Math.max(5,90-value),1])}};
+ });
+}
+function healthDuration(seconds){if(!(seconds>=0))return '—';const minutes=Math.round(seconds/60);return `${Math.floor(minutes/60)}h ${String(minutes%60).padStart(2,'0')}m`;}
+function healthClock(timestamp){return Number.isFinite(Number(timestamp))?new Date(Number(timestamp)).toLocaleString('en-SG',{weekday:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Singapore'}):'—';}
+function drawHealthLine(id,rows,colour,range){
+ const chart=$(id);chart.replaceChildren();const data=(rows||[]).filter(row=>Array.isArray(row)&&Number.isFinite(Number(row[0]))),values=data.map(row=>row[1]).filter(value=>value!=null).map(Number).filter(Number.isFinite);
+ if(data.length<2||!values.length){const text=svg('text',{x:20,y:100,fill:'#7d9086','font-size':13});text.textContent='No readings recorded';chart.append(text);return;}
+ const start=Number(data[0][0]),end=Number(data.at(-1)[0]),low=range?.[0]??Math.min(...values),high=range?.[1]??Math.max(...values),span=Math.max(1,high-low),timeSpan=Math.max(1,end-start);
+ for(let y=25;y<=145;y+=40)chart.append(svg('line',{x1:45,x2:620,y1:y,y2:y,stroke:'#e6ebe4','stroke-width':1}));
+ const flush=points=>{if(points.length>1)chart.append(svg('polyline',{points:points.join(' '),fill:'none',stroke:colour,'stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'}));};let points=[];
+ for(const [time,value] of data){if(value==null||!Number.isFinite(Number(value))){flush(points);points=[];continue;}points.push(`${45+(Number(time)-start)/timeSpan*575},${150-(Number(value)-low)/span*120}`);}flush(points);
+ const left=svg('text',{x:45,y:178,fill:'#7d9086','font-size':11});left.textContent=healthClock(start).split(', ').at(-1);const right=svg('text',{x:620,y:178,fill:'#7d9086','font-size':11,'text-anchor':'end'});right.textContent=healthClock(end).split(', ').at(-1);chart.append(left,right);
+}
+function drawSleepStages(rows){
+ const chart=$('sleep-stages');chart.replaceChildren();const stages=(rows||[]).filter(row=>Array.isArray(row)&&Number.isFinite(Number(row[0]))&&Number.isFinite(Number(row[1])));
+ if(!stages.length){const text=svg('text',{x:20,y:48,fill:'#7d9086','font-size':13});text.textContent='No sleep stages recorded';chart.append(text);return;}
+ const start=Math.min(...stages.map(row=>row[0])),end=Math.max(...stages.map(row=>row[1])),span=Math.max(1,end-start),colours=['#365c74','#91a9bd','#aa86b8','#ed9a72'];
+ for(const [from,to,level] of stages)chart.append(svg('rect',{x:20+(from-start)/span*600,y:18,width:Math.max(1,(to-from)/span*600),height:38,rx:3,fill:colours[Math.max(0,Math.min(3,Math.round(level??3)))]}));
+ const left=svg('text',{x:20,y:78,fill:'#7d9086','font-size':11});left.textContent=healthClock(start);const right=svg('text',{x:620,y:78,fill:'#7d9086','font-size':11,'text-anchor':'end'});right.textContent=healthClock(end);chart.append(left,right);
+}
+function drawHealthHistory(id,rows,value,format,colour){
+ const target=$(id);target.replaceChildren();const maximum=Math.max(1,...rows.map(row=>value(row)||0));
+ for(const row of rows){const button=document.createElement('button');button.className='health-history-bar';button.setAttribute('aria-pressed',String(row.date===healthDay));button.setAttribute('aria-label',`${row.date}: ${format(value(row))}`);const label=document.createElement('span');label.textContent=format(value(row));const bar=document.createElement('i');bar.style.height=Math.max(2,(value(row)||0)/maximum*105)+'px';bar.style.background=colour;const day=document.createElement('small');day.textContent=new Date(row.date+'T12:00:00Z').toLocaleDateString('en-SG',{weekday:'short',timeZone:'UTC'});button.append(label,bar,day);button.onclick=()=>{healthDay=row.date;renderHealth();};target.append(button);}
 }
 function renderHealth(){
  const rows=demo?demoHealth():actualHealth;
  if(!rows.some(r=>r.date===healthDay))healthDay=rows.at(-1)?.date||'';
  const selector=$('health-date');selector.replaceChildren();
  for(const row of [...rows].reverse()){const o=document.createElement('option');o.value=row.date;o.textContent=shortDate(row.date);selector.append(o);}selector.value=healthDay;selector.disabled=!rows.length;
- const r=rows.find(r=>r.date===healthDay)||{};
+ const r=rows.find(r=>r.date===healthDay)||{},heart=r.heart_rate||{},sleep=r.sleep||{},stress=r.stress||{},score=sleep.scores?.overall?.value??sleep.daily_score;
  setText('health-source',demo?'DEMO · illustrative readings, not your health data':'Garmin daily readings · latest successful sync');
  $('health-empty').hidden=rows.length>0;
  setText('health-steps',r.steps==null?'—':Math.round(r.steps).toLocaleString('en-SG'));
  setText('health-distance',r.distance_m==null?'—':(r.distance_m/1000).toFixed(2)+' km');
- setText('health-rest',r.resting_hr_bpm??'—');setText('health-average',r.average_hr_bpm??'—');setText('health-max',r.max_hr_bpm??'—');
+ setText('health-rest',r.resting_hr_bpm??'—');setText('health-min',heart.minimum_bpm??'—');setText('health-average',r.average_hr_bpm??'—');setText('health-max',r.max_hr_bpm??'—');
+ setText('health-sleep-score',score??'—');setText('health-sleep-quality',sleep.scores?.overall?.qualifier??sleep.score_quality??'Garmin sleep score');setText('health-sleep-total',healthDuration(sleep.total_s??sleep.daily_total_s));
+ setText('health-stress-average',stress.average_level??'—');setText('health-stress-max',stress.maximum_level??'—');
+ setText('health-sleep-window',sleep.start_gmt==null?'—':`${healthClock(sleep.start_gmt)} – ${healthClock(sleep.end_gmt)}`);setText('health-sleep-need',healthDuration(sleep.sleep_need?.actual_s));
+ setText('health-sleep-breakdown',[sleep.deep_s,sleep.light_s,sleep.rem_s,sleep.awake_s].map(healthDuration).join(' / '));setText('health-sleep-heart-stress',`${sleep.average_hr_bpm??'—'} bpm / ${sleep.average_stress??'—'}`);
+ setText('health-sleep-hrv',sleep.average_hrv_ms==null?'—':`${sleep.average_hrv_ms} ms · ${sleep.hrv_status??'status unavailable'}`);setText('health-sleep-respiration',`${sleep.average_respiration_bpm??sleep.daily_respiration_bpm??'—'} brpm / ${sleep.spo2_percent??'—'}%`);
+ setText('health-sleep-temperature',sleep.skin_temp_c==null?'—':`${sleep.skin_temp_c>0?'+':''}${sleep.skin_temp_c} °C`);setText('health-sleep-battery',sleep.body_battery_change==null?'—':`${sleep.body_battery_change>0?'+':''}${sleep.body_battery_change}`);setText('health-sleep-restless',sleep.restless_moments_count??'—');
+ setText('health-heart-samples',`${heart.samples?.length||0} readings`);setText('health-stress-samples',`${stress.samples?.length||0} readings`);setText('health-battery-samples',`${stress.body_battery_samples?.length||0} readings`);setText('health-sleep-heart-samples',`${sleep.heart_rate_samples?.length||0} readings`);setText('health-sleep-hrv-samples',`${sleep.hrv_samples?.length||0} readings`);setText('health-sleep-respiration-samples',`${sleep.respiration_samples?.length||0} readings`);setText('health-sleep-movement-samples',`${sleep.movement?.length||0} intervals`);setText('health-sleep-disruption-samples',`${sleep.breathing_disruptions?.length||0} intervals`);
+ drawHealthLine('heart-chart',heart.samples,'#e77343');drawHealthLine('stress-chart',stress.samples,'#648876',[0,100]);drawSleepStages(sleep.levels);
+ drawHealthHistory('sleep-history',rows,row=>row.sleep?.total_s??row.sleep?.daily_total_s,value=>healthDuration(value),'#718da4');drawHealthHistory('stress-history',rows,row=>row.stress?.average_level,value=>value==null?'—':String(Math.round(value)),'#d78460');
  $('health-bars').replaceChildren();$('health-table').replaceChildren();const maximum=Math.max(1,...rows.map(r=>r.steps||0));
  for(const row of rows){const button=document.createElement('button');button.className='health-bar';button.setAttribute('aria-pressed',String(row.date===healthDay));button.setAttribute('aria-label',`${row.date}: ${row.steps??'Unavailable'} steps`);const value=document.createElement('span');value.textContent=row.steps==null?'—':Math.round(row.steps).toLocaleString('en-SG');const bar=document.createElement('i');bar.style.height=Math.max(2,(row.steps||0)/maximum*120)+'px';const label=document.createElement('small');label.textContent=new Date(row.date+'T12:00:00Z').toLocaleDateString('en-SG',{weekday:'short',timeZone:'UTC'});button.append(value,bar,label);button.onclick=()=>{healthDay=row.date;renderHealth();};$('health-bars').append(button);
- const tr=document.createElement('tr');for(const text of [shortDate(row.date),row.steps==null?'—':row.steps.toLocaleString('en-SG'),row.distance_m==null?'—':(row.distance_m/1000).toFixed(2)+' km',row.resting_hr_bpm==null?'—':row.resting_hr_bpm+' bpm']){const td=document.createElement('td');td.textContent=text;tr.append(td);}$('health-table').prepend(tr);
+ const tr=document.createElement('tr');for(const text of [shortDate(row.date),row.steps==null?'—':row.steps.toLocaleString('en-SG'),row.distance_m==null?'—':(row.distance_m/1000).toFixed(2)+' km',row.resting_hr_bpm==null?'—':row.resting_hr_bpm+' bpm',row.sleep?.scores?.overall?.value??row.sleep?.daily_score??'—',row.stress?.average_level??'—']){const td=document.createElement('td');td.textContent=text;tr.append(td);}$('health-table').prepend(tr);
  }
 }
 $('health-date').onchange=()=>{healthDay=$('health-date').value;renderHealth();};
