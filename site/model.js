@@ -24,3 +24,10 @@ export function weeks(runs,count=8,end=new Date().toISOString().slice(0,10)) {
   }
   return buckets;
 }
+
+export function healthWeek(rows,end) {
+  if(!end)return [];
+  const start=new Date(end+'T00:00:00Z');start.setUTCDate(start.getUTCDate()-6);
+  const from=start.toISOString().slice(0,10);
+  return rows.filter(row=>row.date>=from&&row.date<=end);
+}

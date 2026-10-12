@@ -14,3 +14,8 @@ test('weekly totals include year boundary and missing weeks',()=>{
  assert.deepEqual(result.map(w=>w.km),[0,5,2]);
 });
 test('duration carries rounded seconds to next minute',()=>assert.equal(model.duration(3599.9),'1h 00m'));
+test('health trends use seven calendar days ending on selected date, including year boundary',()=>{
+ const rows=[{date:'2025-12-25'},{date:'2025-12-26'},{date:'2026-01-01'},{date:'2026-01-02'}];
+ assert.deepEqual(model.healthWeek(rows,'2026-01-01').map(r=>r.date),['2025-12-26','2026-01-01']);
+ assert.deepEqual(model.healthWeek(rows,''),[]);
+});

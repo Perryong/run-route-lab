@@ -45,7 +45,7 @@ def collect(client, data, max_activities=1000, delay=0.4, excluded=(), redownloa
     return data
 
 
-def run(path,key,bootstrap,output,client=None,max_activities=1000,trim_m=200,excluded=(),redownload=False,include_health=False):
+def run(path,key,bootstrap,output,client=None,max_activities=1000,trim_m=200,excluded=(),redownload=False,include_health=False,health_start="2026-01-01"):
     path=Path(path)
     data=state.load(path,key) if path.exists() else {'tokens':bootstrap,'activities':{}}
     if os.environ.get('RESET_SESSION')=='true':
@@ -60,7 +60,7 @@ def run(path,key,bootstrap,output,client=None,max_activities=1000,trim_m=200,exc
         # A failed collection must not replace the last complete activity snapshot.
         pending=copy.deepcopy(data)
         collect(client,pending,max_activities,excluded=excluded,redownload=redownload)
-        if include_health:pending['health']=health.collect(client)
+        if include_health:pending['health']=health.collect(client,start=health_start,existing=data.get('health',[]))
         data=pending
     finally:
         token_json=client.client.dumps()
@@ -99,7 +99,8 @@ def main():
             max_activities=int(os.environ.get('MAX_ACTIVITIES','1000')),
             trim_m=float(os.environ.get('ROUTE_TRIM_METERS','200')),
             excluded=set(filter(None,os.environ.get('EXCLUDED_ACTIVITY_IDS','').replace(' ','').split(','))),
-            redownload=args.redownload,include_health=os.environ.get('PUBLISH_HEALTH','true')=='true')
+            redownload=args.redownload,include_health=os.environ.get('PUBLISH_HEALTH','true')=='true',
+            health_start=os.environ.get('HEALTH_HISTORY_START','2026-01-01'))
     except Exception as exc:
         # Exception text from upstream can contain account data. Emit only the type.
         print(f'Sync failed ({type(exc).__name__}). Previous live site is unchanged. Check configuration, Garmin status, or renew local authentication.')

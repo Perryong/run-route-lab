@@ -49,6 +49,7 @@ jobs:
           GARMIN_STATE_KEY: ${{ secrets.GARMIN_STATE_KEY }}
           PUBLISH_HEALTH: ${{ vars.PUBLISH_HEALTH || 'true' }}
           SYNC_ENABLED: ${{ vars.GARMIN_SYNC_ENABLED }}
+          HEALTH_HISTORY_START: ${{ vars.HEALTH_HISTORY_START || '2026-01-01' }}
           MAX_ACTIVITIES: ${{ vars.MAX_ACTIVITIES || '1000' }}
           ROUTE_TRIM_METERS: ${{ vars.ROUTE_TRIM_METERS || '200' }}
           EXCLUDED_ACTIVITY_IDS: ${{ vars.EXCLUDED_ACTIVITY_IDS }}

@@ -1,4 +1,4 @@
-import {pace,duration,filterRuns,weeks} from './model.js';
+import {pace,duration,filterRuns,weeks,healthWeek} from './model.js';
 import {demoRuns} from './demo.js';
 const $=id=>document.getElementById(id);
 const ns='http://www.w3.org/2000/svg';
@@ -281,12 +281,16 @@ function renderHealth(){
  setText('gauge-battery-value',battery??'—');
  drawGauge('sleep',score,'#ad94ed');drawGauge('stress',stress.average_level,'#e5b65b');drawGauge('battery',battery,'#83c77c');
  drawSleepStages(sleep.levels);drawSleepDonut(sleep);
- drawHealthHistory('distance-history',rows,row=>row.distance_m==null?null:row.distance_m/1000,value=>value==null?'—':value.toFixed(2),'#69bbdf');
- drawHealthHistory('rest-history',rows,row=>row.resting_hr_bpm,value=>value==null?'—':String(value),'#f17689');
- drawHealthHistory('score-history',rows,row=>row.sleep?.scores?.overall?.value??row.sleep?.daily_score,value=>value==null?'—':String(value),'#ad94ed');
- drawHealthHistory('sleep-history',rows,row=>row.sleep?.total_s??row.sleep?.daily_total_s,value=>healthDuration(value),'#ad94ed');drawHealthHistory('stress-history',rows,row=>row.stress?.average_level,value=>value==null?'—':String(Math.round(value)),'#e5b65b');
- $('health-bars').replaceChildren();$('health-table').replaceChildren();const maximum=Math.max(1,...rows.map(r=>r.steps||0));
- for(const row of rows){const button=document.createElement('button');button.className='health-bar';button.setAttribute('aria-pressed',String(row.date===healthDay));button.setAttribute('aria-label',`${row.date}: ${row.steps??'Unavailable'} steps`);const value=document.createElement('span');value.textContent=row.steps==null?'—':Math.round(row.steps).toLocaleString('en-SG');const bar=document.createElement('i');bar.style.height=Math.max(0,(row.steps||0)/maximum*120)+'px';const label=document.createElement('small');label.textContent=new Date(row.date+'T12:00:00Z').toLocaleDateString('en-SG',{weekday:'short',timeZone:'UTC'});button.append(value,bar,label);button.onclick=()=>{healthDay=row.date;renderHealth();};$('health-bars').append(button);
+ const trendRows=healthWeek(rows,healthDay);
+ setText('health-trend-range',healthDay?'7 DAYS ENDING '+shortDate(healthDay):'7-DAY TRENDS');
+ drawHealthHistory('distance-history',trendRows,row=>row.distance_m==null?null:row.distance_m/1000,value=>value==null?'—':value.toFixed(2),'#69bbdf');
+ drawHealthHistory('rest-history',trendRows,row=>row.resting_hr_bpm,value=>value==null?'—':String(value),'#f17689');
+ drawHealthHistory('score-history',trendRows,row=>row.sleep?.scores?.overall?.value??row.sleep?.daily_score,value=>value==null?'—':String(value),'#ad94ed');
+ drawHealthHistory('sleep-history',trendRows,row=>row.sleep?.total_s??row.sleep?.daily_total_s,value=>healthDuration(value),'#ad94ed');drawHealthHistory('stress-history',trendRows,row=>row.stress?.average_level,value=>value==null?'—':String(Math.round(value)),'#e5b65b');
+ $('health-bars').replaceChildren();$('health-table').replaceChildren();const maximum=Math.max(1,...trendRows.map(r=>r.steps||0));
+ for(const row of trendRows){const button=document.createElement('button');button.className='health-bar';button.setAttribute('aria-pressed',String(row.date===healthDay));button.setAttribute('aria-label',`${row.date}: ${row.steps??'Unavailable'} steps`);const value=document.createElement('span');value.textContent=row.steps==null?'—':Math.round(row.steps).toLocaleString('en-SG');const bar=document.createElement('i');bar.style.height=Math.max(0,(row.steps||0)/maximum*120)+'px';const label=document.createElement('small');label.textContent=new Date(row.date+'T12:00:00Z').toLocaleDateString('en-SG',{weekday:'short',timeZone:'UTC'});button.append(value,bar,label);button.onclick=()=>{healthDay=row.date;renderHealth();};$('health-bars').append(button);
+ }
+ for(const row of rows){
  const tr=document.createElement('tr');for(const text of [shortDate(row.date),row.steps==null?'—':row.steps.toLocaleString('en-SG'),row.distance_m==null?'—':(row.distance_m/1000).toFixed(2)+' km',row.resting_hr_bpm==null?'—':row.resting_hr_bpm+' bpm',row.sleep?.scores?.overall?.value??row.sleep?.daily_score??'—',row.stress?.average_level??'—']){const td=document.createElement('td');td.textContent=text;tr.append(td);}$('health-table').prepend(tr);
  }
 }

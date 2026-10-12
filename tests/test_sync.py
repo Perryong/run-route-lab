@@ -62,3 +62,42 @@ class LoginFailureTests(unittest.TestCase):
             restored=state.load(path,key)
             self.assertIn('rotated',restored['tokens'])
             self.assertEqual(restored['activities'],old['activities'])
+
+class HealthPersistenceTests(unittest.TestCase):
+    def test_history_persists_and_failed_refresh_preserves_snapshot_and_output(self):
+        import json
+        from unittest.mock import patch
+        from scripts import health
+        real_collect=health.collect
+        class Client:
+            fail=False
+            client=None
+            def __init__(self):self.client=self
+            def dumps(self):return 'refreshed-token'
+            def login(self,tokens):pass
+            def get_activities(self,**kw):return []
+            def get_sleep_daily(self,start,end):return []
+            def get_sleep_data(self,day):return {}
+            def get_stress_data(self,day):return {}
+            def get_heart_rates(self,day):return {}
+            def get_user_summary(self,day):
+                if self.fail and day=='2026-01-08':raise RuntimeError('network failure')
+                return {'totalSteps':123}
+        client=Client()
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'state.enc';output=Path(folder)/'activities.json'
+            key=Fernet.generate_key().decode()
+            state.save(path,key,{'tokens':'old','activities':{},'health':[{'date':'2026-01-01','steps':99}]})
+            with patch.object(health,'collect',side_effect=lambda client,**kw:real_collect(client,end='2026-01-10',delay=0,**kw)):
+                sync.run(path,key,None,output,client=client,include_health=True)
+                saved=state.load(path,key)
+                public=json.loads(output.with_name('health.json').read_text())
+                self.assertEqual(len(public['days']),10)
+                self.assertEqual(public['days'],saved['health'])
+                self.assertEqual(public['days'][0],{'date':'2026-01-01','steps':99})
+                before=output.with_name('health.json').read_bytes()
+                client.fail=True
+                with self.assertRaises(RuntimeError):sync.run(path,key,None,output,client=client,include_health=True)
+                self.assertEqual(state.load(path,key)['health'],saved['health'])
+                self.assertEqual(output.with_name('health.json').read_bytes(),before)
+                self.assertEqual(state.load(path,key)['tokens'],'refreshed-token')

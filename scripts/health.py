@@ -1,5 +1,6 @@
 """Daily Garmin metrics; missing readings remain null, never invented zeros."""
 import json
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -87,16 +88,24 @@ def normalize(day, summary, heart, sleep=None, stress=None):
             'status':'available' if summary or heart or sleep or stress else 'unavailable'}
 
 
-def collect(client, end=None):
+def collect(client, end=None, start=None, existing=(), delay=0.4):
     end=date.fromisoformat(end) if end else datetime.now(ZoneInfo('Asia/Singapore')).date()
-    start=end-timedelta(days=6)
-    daily_sleep={row.get('calendarDate'):row.get('values') or {} for row in client.get_sleep_daily(start.isoformat(),end.isoformat()) or [] if isinstance(row,dict) and row.get('calendarDate')}
-    rows=[]
-    for offset in range(6,-1,-1):
-        day=(end-timedelta(days=offset)).isoformat()
-        sleep=client.get_sleep_data(day) or {};sleep['_daily']=daily_sleep.get(day,{})
-        rows.append(normalize(day,client.get_user_summary(day) or {},client.get_heart_rates(day) or {},sleep,client.get_stress_data(day) or {}))
-    return rows
+    start=date.fromisoformat(start) if start else end-timedelta(days=6)
+    if start>end:raise ValueError('Health history start must not be after the end date')
+    records={row['date']:row for row in existing}
+    refresh=end-timedelta(days=6)
+    days=[start+timedelta(days=offset) for offset in range((end-start).days+1)]
+    needed=[day.isoformat() for day in days if day>=refresh or day.isoformat() not in records]
+    # Small batches bound summary requests and pace the initial historical import.
+    for offset in range(0,len(needed),7):
+        batch=needed[offset:offset+7]
+        daily_sleep={row.get('calendarDate'):row.get('values') or {} for row in client.get_sleep_daily(batch[0],batch[-1]) or [] if isinstance(row,dict) and row.get('calendarDate')}
+        for day in batch:
+            sleep=client.get_sleep_data(day) or {};sleep['_daily']=daily_sleep.get(day,{})
+            records[day]=normalize(day,client.get_user_summary(day) or {},client.get_heart_rates(day) or {},sleep,client.get_stress_data(day) or {})
+            time.sleep(delay)
+        print(f'Collected health through {batch[-1]} ({min(offset+7,len(needed))}/{len(needed)} days).',flush=True)
+    return [records[day] for day in sorted(records)]
 
 
 def write(rows,path):

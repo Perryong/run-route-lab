@@ -15,7 +15,7 @@ const assert=require('node:assert/strict');
  // Keep repeated automated tests off community tile servers. Routes still render.
  await page.route('https://tile.openstreetmap.org/**',route=>route.abort());
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.route('**/data/*.json',async route=>{await new Promise(resolve=>setTimeout(resolve,800));await route.continue();});
+ await page.route('**/data/*.json',async route=>{await new Promise(resolve=>setTimeout(resolve,800));await route.fulfill({json:route.request().url().endsWith('/health.json')?{schema_version:1,days:[]}:{schema_version:1,activities:[]}});});
  await page.goto(process.env.TEST_URL||`http://127.0.0.1:${server.address().port}`,{waitUntil:'domcontentloaded'});
  await page.locator('#demo').click();
  await page.waitForTimeout(1000);
@@ -83,6 +83,7 @@ const assert=require('node:assert/strict');
  // A controlled public dataset catches wrong Body Battery column, null-as-zero,
  // stale gauge state on date changes, and incorrect stage proportions.
  await page.route('**/data/health.json',route=>route.fulfill({json:{schema_version:1,days:[
+  {date:'2026-01-01',steps:123,sleep:{},stress:{}},
   {date:'2026-09-30',sleep:{deep_s:0,light_s:0,rem_s:0,awake_s:0},stress:{}},
   {date:'2026-10-01',sleep:{deep_s:null,light_s:null,rem_s:null,awake_s:null},stress:{}},
   {date:'2026-10-02',steps:0,resting_hr_bpm:55,heart_rate:{samples:[[1790899200000,60]]},
@@ -111,6 +112,13 @@ const assert=require('node:assert/strict');
  assert.match(await page.locator('#sleep-donut').getAttribute('aria-label'),/Deep 0h 00m/);
  assert.match(await page.locator('#battery-chart').textContent(),/No readings/);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.locator('#health-date').selectOption('2026-01-01');
+ assert.equal(await page.locator('#health-steps').textContent(),'123');
+ assert.equal(await page.locator('#health-bars button').count(),1);
+ assert.equal(await page.locator('#distance-history button').count(),1);
+ assert.equal(await page.locator('#health-table tr').count(),4);
+ assert.equal(await page.locator('#health-date option').count(),4);
+ assert.match(await page.locator('#health-trend-range').textContent(),/1 Jan/);
  assert.deepEqual(errors,[]);
  await browser.close();server.close();console.log('Browser checks passed (timelines, gauges, donut, interval inspection, missing/zero readings, zoom, day selection, routes, and mobile).');
 })().catch(e=>{console.error(e);process.exit(1)});

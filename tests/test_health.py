@@ -41,3 +41,35 @@ class HealthTests(unittest.TestCase):
    def get_user_summary(self,date):raise GarminConnectConnectionError('Unavailable')
    def get_heart_rates(self,date):return {}
   with self.assertRaises(GarminConnectConnectionError):health.collect(Client(),'2026-09-15')
+
+class HistoryTests(unittest.TestCase):
+ def client(self):
+  class Client:
+   def __init__(self):self.days=[]
+   def get_sleep_daily(self,start,end):return []
+   def get_sleep_data(self,day):return {}
+   def get_stress_data(self,day):return {}
+   def get_heart_rates(self,day):return {}
+   def get_user_summary(self,day):
+    self.days.append(day)
+    return {'totalSteps':123}
+  return Client()
+
+ def test_backfill_retains_history_refreshes_recent_and_fills_gaps(self):
+  client=self.client()
+  old=[{'date':'2026-01-01','steps':99},{'date':'2026-01-03','steps':88},{'date':'2026-01-10','steps':1}]
+  rows=health.collect(client,'2026-01-10',start='2026-01-01',existing=old,delay=0)
+  self.assertEqual(len(rows),10)
+  self.assertEqual(rows[0],old[0])
+  self.assertEqual(rows[1]['steps'],123)
+  self.assertEqual(rows[2],old[1])
+  self.assertEqual(rows[-1]['steps'],123)
+  self.assertEqual(client.days,['2026-01-02','2026-01-04','2026-01-05','2026-01-06','2026-01-07','2026-01-08','2026-01-09','2026-01-10'])
+  client.days=[]
+  again=health.collect(client,'2026-01-10',start='2026-01-01',existing=rows,delay=0)
+  self.assertEqual(len(again),10)
+  self.assertEqual(client.days,['2026-01-04','2026-01-05','2026-01-06','2026-01-07','2026-01-08','2026-01-09','2026-01-10'])
+
+ def test_invalid_history_start_rejected_before_requests(self):
+  for start in ['bad-date','2026-01-11']:
+   with self.assertRaises(ValueError):health.collect(self.client(),'2026-01-10',start=start,delay=0)
